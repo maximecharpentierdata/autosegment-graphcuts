@@ -1,11 +1,12 @@
-from typing import List, Tuple, Dict
+from typing import Dict, List, Tuple
+from black import main
 
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 def _make_histogram(
-    reshaped_image: np.ndarray, n_colors: int = 2, bins: int = 5
+    reshaped_image: np.ndarray, threshold: float, bins: int = 5
 ) -> Tuple[List[int], np.ndarray]:
     """Fetch top colors from the histogram
 
@@ -17,8 +18,14 @@ def _make_histogram(
     Returns:
         Tuple[List[int], np.ndarray]: Unflatten indexes of top colors and all edges
     """
-    hist, edges = np.histogramdd(reshaped_image, bins=bins)
-    best_indexes = hist.flatten().argsort()[::-1][:n_colors]
+    ranges = (
+        (np.min(reshaped_image[:, 0]), np.max(reshaped_image[:, 0])),
+        (np.min(reshaped_image[:, 1]), np.max(reshaped_image[:, 1])),
+        (np.min(reshaped_image[:, 2]), np.max(reshaped_image[:, 2])),
+    )
+    hist, edges = np.histogramdd(reshaped_image, bins=bins, range=ranges)
+    hist = hist / len(reshaped_image)
+    best_indexes = np.where(hist.flatten() > threshold)[0]
 
     unflatten_indexes = [np.unravel_index(index, hist.shape) for index in best_indexes]
     return unflatten_indexes, np.array(edges)
@@ -61,7 +68,7 @@ def _get_best_colors_boundaries(
 
 
 def get_main_colors(
-    reshaped_image: np.ndarray, n_colors: int = 2, bins: int = 5
+    reshaped_image: np.ndarray, threshold: float, bins: int = 5
 ) -> np.ndarray:
     """Compute best colors
 
@@ -73,7 +80,7 @@ def get_main_colors(
     Returns:
         np.ndarray: Main colors
     """
-    unflatten_indexes, edges = _make_histogram(reshaped_image, n_colors, bins)
+    unflatten_indexes, edges = _make_histogram(reshaped_image, threshold, bins)
     main_colors = _get_best_colors_boundaries(unflatten_indexes, edges)
     return main_colors
 
@@ -136,7 +143,11 @@ def compute_distributions(
     for mask in masks:
         sub_image = image[mask]
         distributions.append(
-            dict(mu=np.mean(sub_image, axis=0), sigma2=np.var(sub_image, axis=0))
+            dict(
+                mu=np.mean(sub_image, axis=0),
+                sigma2=np.var(sub_image, axis=0),
+                size=len(sub_image),
+            )
         )
     return distributions
 
@@ -146,3 +157,55 @@ def show_mask(mask: np.ndarray, image: np.ndarray):
     g = np.where(mask, image[..., 1], 255)[..., np.newaxis]
     b = np.where(mask, image[..., 2], 255)[..., np.newaxis]
     plt.imshow(np.concatenate([r, g, b], axis=-1))
+
+
+def make_original_partition(image: np.ndarray, main_colors: np.ndarray) -> dict:
+    """Generate an initial partition of using euclidian distance with main colors
+
+    Args:
+        image (np.ndarray): Image
+        main_colors (np.ndarray): Main colors boundaries
+
+    Returns:
+        dict: Initial partition
+    """
+    partition = {k: set() for k in range(len(main_colors))}
+    reshaped_image = image.reshape(-1, 3)
+    for n in range(len(reshaped_image)):
+        pixel = reshaped_image[n]
+        distances = np.linalg.norm(pixel - np.mean(main_colors, 2), axis=1)
+        label = np.argmin(distances)
+        partition[label].add(str(n))
+    return partition
+
+
+def segmentation(
+    image: np.ndarray, params: dict, verbose: bool = True, threshold: float = 0.1
+) -> Tuple[List[Dict[str, np.ndarray]], dict]:
+    """Run the original segmentation using histogram of colors
+
+    Args:
+        image (np.ndarray): Image
+        params (dict): Params with key bins (int)
+        verbose (bool, optional): Verbose. Defaults to True.
+        threshold (float, optional): Threshold. Defaults to 0.1.
+
+    Returns:
+        Tuple[List[Dict[str, np.ndarray]], dict]: Distributions of main colors
+        and original partition
+    """
+    if verbose:
+        print("Computing main colors...")
+    reshaped_image = image.reshape((-1, 3))
+    main_colors = get_main_colors(
+        reshaped_image, bins=params["bins"], threshold=threshold
+    )
+    while len(main_colors) == 0:
+        threshold = threshold * 9 / 10
+        main_colors = get_main_colors(
+            reshaped_image, bins=params["bins"], threshold=threshold
+        )
+    masks = compute_masks(main_colors, image)
+    distributions = compute_distributions(masks, image)
+    original_partition = make_original_partition(image, main_colors)
+    return distributions, original_partition

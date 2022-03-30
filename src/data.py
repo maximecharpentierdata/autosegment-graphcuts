@@ -1,5 +1,5 @@
-import urllib.request
 import tarfile
+import urllib.request
 
 from tqdm import tqdm
 

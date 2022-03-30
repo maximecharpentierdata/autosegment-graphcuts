@@ -1,33 +1,13 @@
-from typing import Tuple, Dict, List
+from typing import Dict, List, Tuple
 
-import numpy as np
 import matplotlib.pyplot as plt
-
-
-def make_arbitrary_partition(image: np.ndarray, main_colors: np.ndarray) -> dict:
-    """Generates an initial partition of using euclidian distance with main colors
-
-    Args:
-        image (np.ndarray): Image
-        main_colors (np.ndarray): Main colors boundaries
-
-    Returns:
-        dict: Initial partition
-    """
-    partition = {k: set() for k in range(len(main_colors))}
-    reshaped_image = image.reshape(-1, 3)
-    for n in range(len(reshaped_image)):
-        pixel = reshaped_image[n]
-        distances = np.linalg.norm(pixel - np.mean(main_colors, 2), axis=1)
-        label = np.argmin(distances)
-        partition[label].add(str(n))
-    return partition
+import numpy as np
 
 
 def construct_segmentation(
     partition: Dict[int, set], shape: Tuple[int, int]
 ) -> np.ndarray:
-    """Generates segmented image from partition
+    """Generate segmented image from partition
 
     Args:
         partition (dict): Partition
@@ -61,7 +41,7 @@ def make_expansion(
     alpha: int,
     auxiliary_nodes: List[str],
 ) -> Dict[int, str]:
-    """Finishes one alpha-expansion iteration from the obtained s-t cut
+    """Finishe one alpha-expansion iteration from the obtained s-t cut
 
     Args:
         original_partition (Dict[int, set]): Original partition
