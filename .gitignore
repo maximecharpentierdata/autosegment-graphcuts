@@ -133,6 +133,3 @@ data/
 
 # MacOS
 .DS_Store
-
-# Notebooks
-*.ipynb
